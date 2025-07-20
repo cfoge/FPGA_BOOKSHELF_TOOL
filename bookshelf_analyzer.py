@@ -15,8 +15,6 @@ import sys
 import re
 from collections import defaultdict, Counter
 from pathlib import Path
-import matplotlib.pyplot as plt
-import numpy as np
 from datetime import datetime
 import argparse
 
@@ -37,7 +35,6 @@ class BookshelfAnalyzer:
             for line in lines:
                 line = line.strip()
                 if line.startswith('#'):
-                    # Parse version and date
                     if 'version' in line:
                         version_match = re.search(r'version\s+([^\s]+)', line)
                         date_match = re.search(r'(\d{2}/\d{2}/\d{4})', line)
@@ -46,7 +43,6 @@ class BookshelfAnalyzer:
                         if date_match:
                             aux_data['date'] = date_match.group(1)
                 elif ':' in line:
-                    # Parse included files
                     parts = line.split(':')
                     if len(parts) == 2:
                         design_name = parts[0].strip()
@@ -76,7 +72,7 @@ class BookshelfAnalyzer:
                 elif line.startswith('PIN') and current_cell:
                     pin_info = line.split()[1:]
                     pin_name = pin_info[0]
-                    pin_type = 'INPUT'  # default
+                    pin_type = 'INPUT'
                     pin_attr = []
                     
                     for attr in pin_info[1:]:
@@ -148,7 +144,6 @@ class BookshelfAnalyzer:
                         nets[net_name] = current_net
                         net_count += 1
                 elif line.startswith('\t') and current_net:
-                    # Parse connection: instance_name pin_name
                     connection = line.strip().split()
                     if len(connection) >= 2:
                         current_net['connections'].append({
@@ -186,7 +181,6 @@ class BookshelfAnalyzer:
                             'x': x, 'y': y, 'bel': bel
                         }
                         
-                        # Try to get type from nodes file if available
                         if hasattr(self, 'instances') and instance_name in self.instances:
                             instance_type = self.instances[instance_name]
                             fixed_types[instance_type] += 1
@@ -213,22 +207,19 @@ class BookshelfAnalyzer:
             in_resources = False
             in_sitemap = False
             site_map_count = 0
-            max_site_map_entries = 10000  # Limit to avoid memory issues
+            max_site_map_entries = 10000
             
-            for i, line in enumerate(lines):
+            for line in lines:
                 line = line.strip()
                 
-                # Check SITEMAP first (highest priority)
                 if line.startswith('SITEMAP'):
                     in_sitemap = True
-                    # Parse dimensions from SITEMAP line (e.g., "SITEMAP 168 480")
                     parts = line.split()
                     if len(parts) >= 3:
                         try:
                             width = int(parts[1])
                             height = int(parts[2])
                             sitemap_dimensions = (width, height)
-                            # print(f"Found FPGA site map dimensions: {width} x {height}")
                         except ValueError as e:
                             print(f"Error parsing SITEMAP dimensions: {e}")
                     else:
@@ -241,7 +232,6 @@ class BookshelfAnalyzer:
                 elif line.startswith('END SITE'):
                     current_site = None
                 elif current_site and line and not in_sitemap:
-                    # Parse site resources
                     parts = line.split()
                     if len(parts) >= 2:
                         resource_type = parts[0]
@@ -253,7 +243,6 @@ class BookshelfAnalyzer:
                 elif line.startswith('END RESOURCES'):
                     in_resources = False
                 elif in_resources and line:
-                    # Parse resource mappings
                     parts = line.split()
                     if len(parts) >= 2:
                         resource_type = parts[0]
@@ -261,8 +250,6 @@ class BookshelfAnalyzer:
                         resources[resource_type] = cell_names
                         
                 elif in_sitemap and line and not line.startswith('SITEMAP'):
-                    # Parse site map entries: x y site_type
-                    # These are x/y coordinates in the FPGA fabric, not site types
                     parts = line.split()
                     if len(parts) >= 3 and site_map_count < max_site_map_entries:
                         try:
@@ -274,7 +261,6 @@ class BookshelfAnalyzer:
                             })
                             site_map_count += 1
                         except ValueError:
-                            # Skip lines that don't have valid coordinates
                             continue
                         
         except Exception as e:
@@ -306,27 +292,49 @@ class BookshelfAnalyzer:
             
         return weights, weight_count
     
+    def count_site_types_from_scl(self, scl_file_path):
+        """Efficiently count site types from SCL file without storing all entries."""
+        site_type_counts = Counter()
+        
+        try:
+            with open(scl_file_path, 'r') as f:
+                in_sitemap = False
+                for line in f:
+                    line = line.strip()
+                    
+                    if line.startswith('SITEMAP'):
+                        in_sitemap = True
+                    elif line.startswith('END SITEMAP'):
+                        in_sitemap = False
+                    elif in_sitemap and line and not line.startswith('SITEMAP'):
+                        parts = line.split()
+                        if len(parts) >= 3:
+                            try:
+                                site_type = parts[2]
+                                site_type_counts[site_type] += 1
+                            except (ValueError, IndexError):
+                                continue
+                        
+        except Exception as e:
+            print(f"Error counting site types from scl file {scl_file_path}: {e}")
+            
+        return site_type_counts
+    
     def analyze_directory(self):
         """Analyze all Bookshelf files in the directory."""
         print(f"Analyzing Bookshelf files in: {self.directory_path}")
         
-        # Find all .aux files (there should be one per design)
         aux_files = list(self.directory_path.glob("*.aux"))
         
         if not aux_files:
             print("No .aux files found in directory")
             return None
             
-        # For now, analyze the first .aux file found
         aux_file = aux_files[0]
         design_name = aux_file.stem
         
-        # print(f"Analyzing design: {design_name}")
-        
-        # Parse all files
         self.aux_data = self.parse_aux_file(aux_file)
         
-        # Find and parse other files
         lib_file = self.directory_path / f"{design_name}.lib"
         nodes_file = self.directory_path / f"{design_name}.nodes"
         nets_file = self.directory_path / f"{design_name}.nets"
@@ -341,10 +349,8 @@ class BookshelfAnalyzer:
         self.sites, self.resources, self.site_map, self.sitemap_dimensions = self.parse_scl_file(scl_file) if scl_file.exists() else ({}, {}, [], None)
         self.weights, self.weight_count = self.parse_wts_file(wts_file) if wts_file.exists() else ({}, 0)
         
-        # Get efficient site type counts
         self.site_type_counts = self.count_site_types_from_scl(scl_file) if scl_file.exists() else Counter()
         
-        # Compile analysis results
         self.analysis_results = {
             'design_name': design_name,
             'aux_data': self.aux_data,
@@ -380,7 +386,6 @@ class BookshelfAnalyzer:
         report.append(f"Analysis Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append("")
         
-        # Aux file information
         aux_data = self.analysis_results['aux_data']
         report.append("AUX FILE INFORMATION:")
         report.append("-" * 30)
@@ -389,7 +394,6 @@ class BookshelfAnalyzer:
         report.append(f"Included Files: {', '.join(aux_data.get('included_files', []))}")
         report.append("")
         
-        # Library cells
         cells = self.analysis_results['cells']
         report.append("LIBRARY CELLS:")
         report.append("-" * 30)
@@ -399,7 +403,6 @@ class BookshelfAnalyzer:
             report.append(f"  {cell_name}: {cell_info['pin_count']} pins")
         report.append("")
         
-        # Instances
         instance_types = self.analysis_results['instance_types']
         report.append("Nodes:")
         report.append("-" * 30)
@@ -409,7 +412,6 @@ class BookshelfAnalyzer:
             report.append(f"  {inst_type}: {count}")
         report.append("")
         
-        # Nets
         report.append("NETS:")
         report.append("-" * 30)
         report.append(f"Total Nets: {self.analysis_results['net_count']}")
@@ -420,7 +422,6 @@ class BookshelfAnalyzer:
             report.append(f"Max Pins per Net: {max(pin_counts)}")
         report.append("")
         
-        # Fixed instances
         fixed_types = self.analysis_results['fixed_types']
         report.append("FIXED INSTANCES:")
         report.append("-" * 30)
@@ -430,7 +431,6 @@ class BookshelfAnalyzer:
             report.append(f"  {inst_type}: {count}")
         report.append("")
         
-        # Sites and resources
         sites = self.analysis_results['sites']
         resources = self.analysis_results['resources']
         report.append("SITES AND RESOURCES:")
@@ -446,7 +446,6 @@ class BookshelfAnalyzer:
             report.append(f"  {res_type}: {', '.join(cell_names)}")
         report.append("")
         
-        # Site map
         site_map = self.analysis_results['site_map']
         sitemap_dimensions = self.analysis_results['sitemap_dimensions']
         site_type_counts = self.analysis_results['site_type_counts']
@@ -454,22 +453,17 @@ class BookshelfAnalyzer:
         report.append("-" * 30)
         if sitemap_dimensions:
             report.append(f"FPGA Fabric Dimensions: {sitemap_dimensions[0]} x {sitemap_dimensions[1]} sites")
-            # report.append(f"Total FPGA Sites: {sitemap_dimensions[0] * sitemap_dimensions[1]}")
         else:
             report.append("FPGA Fabric Dimensions: Not found")
         report.append("")
         report.append("Site Map Information:")
         report.append(f"  Total Sites in Map: {sum(site_type_counts.values())}")
-        # report.append("  Note: Site map contains x/y coordinates for each site in the FPGA fabric")
-        # report.append("  Each line format: <x_coordinate> <y_coordinate> <site_type>")
         report.append("")
         
-        # Count sites by type
         report.append("Site Type Distribution:")
         for site_type, count in site_type_counts.most_common():
             report.append(f"  {site_type}: {count}")
             
-            # Add total resources for this site type
             if site_type in sites:
                 site_resources = sites[site_type]['resources']
                 if site_resources:
@@ -479,7 +473,6 @@ class BookshelfAnalyzer:
                         report.append(f"      {resource_type}: {total_resources:,}")
         report.append("")
         
-        # Weights
         report.append("TIMING WEIGHTS:")
         report.append("-" * 30)
         report.append(f"Total Weights: {self.analysis_results['weight_count']}")
@@ -492,46 +485,14 @@ class BookshelfAnalyzer:
         
         report.append("=" * 80)
         
-        # Print to console
         print('\n'.join(report))
         
-        # Save to file if specified
         if output_file:
             with open(output_file, 'w') as f:
                 f.write('\n'.join(report))
             print(f"\nReport saved to: {output_file}")
             
         return '\n'.join(report)
-    
-    def count_site_types_from_scl(self, scl_file_path):
-        """Efficiently count site types from SCL file without storing all entries."""
-        site_type_counts = Counter()
-        
-        try:
-            with open(scl_file_path, 'r') as f:
-                in_sitemap = False
-                for line in f:
-                    line = line.strip()
-                    
-                    if line.startswith('SITEMAP'):
-                        in_sitemap = True
-                    elif line.startswith('END SITEMAP'):
-                        in_sitemap = False
-                    elif in_sitemap and line and not line.startswith('SITEMAP'):
-                        # Parse site map entries: x y site_type
-                        # x and y are coordinates in the FPGA fabric, site_type is the actual site type
-                        parts = line.split()
-                        if len(parts) >= 3:
-                            try:
-                                site_type = parts[2]  # The third part is the actual site type
-                                site_type_counts[site_type] += 1
-                            except (ValueError, IndexError):
-                                continue
-                        
-        except Exception as e:
-            print(f"Error counting site types from scl file {scl_file_path}: {e}")
-            
-        return site_type_counts
 
 
 def main():
@@ -542,12 +503,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Check if directory exists
     if not os.path.exists(args.directory):
         print(f"Error: Directory '{args.directory}' does not exist")
         sys.exit(1)
     
-    # Create analyzer and run analysis
     analyzer = BookshelfAnalyzer(args.directory)
     results = analyzer.analyze_directory()
     
@@ -555,9 +514,7 @@ def main():
         print("Analysis failed")
         sys.exit(1)
     
-    # Generate text report
     analyzer.generate_text_report(args.report)
-    
 
 
 if __name__ == "__main__":
