@@ -468,6 +468,15 @@ class BookshelfAnalyzer:
         report.append("Site Type Distribution:")
         for site_type, count in site_type_counts.most_common():
             report.append(f"  {site_type}: {count}")
+            
+            # Add total resources for this site type
+            if site_type in sites:
+                site_resources = sites[site_type]['resources']
+                if site_resources:
+                    report.append("    Total Resources:")
+                    for resource_type, resource_count in site_resources.items():
+                        total_resources = resource_count * count
+                        report.append(f"      {resource_type}: {total_resources:,}")
         report.append("")
         
         # Weights
