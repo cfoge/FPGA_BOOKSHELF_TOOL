@@ -483,6 +483,59 @@ class BookshelfAnalyzer:
             report.append(f"Max Weight: {max(weight_values):.4f}")
         report.append("")
         
+        # Calculate and report utilization
+        report.append("RESOURCE UTILIZATION:")
+        report.append("-" * 30)
+        
+        # Calculate total available resources
+        total_resources = {}
+        sites = self.analysis_results['sites']
+        site_type_counts = self.analysis_results['site_type_counts']
+        
+        for site_type, count in site_type_counts.items():
+            if site_type in sites:
+                site_resources = sites[site_type]['resources']
+                for resource_type, resource_count in site_resources.items():
+                    if resource_type not in total_resources:
+                        total_resources[resource_type] = 0
+                    total_resources[resource_type] += resource_count * count
+        
+        # Get instance counts by type
+        instance_types = self.analysis_results['instance_types']
+        
+        # Calculate utilization for each resource type
+        if total_resources and instance_types:
+            report.append("Resource Utilization by Type:")
+            resources = self.analysis_results['resources']
+            
+            for resource_type, total_available in total_resources.items():
+                # Find instances that use this resource type using the RESOURCES mapping
+                used_count = 0
+                if resource_type in resources:
+                    # Get the cell types that can use this resource
+                    compatible_cells = resources[resource_type]
+                    for instance_type, count in instance_types.items():
+                        if instance_type in compatible_cells:
+                            used_count += count
+                else:
+                    # Fallback to simple string matching if no explicit mapping
+                    for instance_type, count in instance_types.items():
+                        if resource_type.lower() in instance_type.lower() or instance_type.lower() in resource_type.lower():
+                            used_count += count
+                
+                utilization_percent = (used_count / total_available * 100) if total_available > 0 else 0
+                report.append(f"  {resource_type}: {used_count:,} / {total_available:,} ({utilization_percent:.2f}%)")
+            
+            # Calculate overall utilization
+            total_used = sum(instance_types.values())
+            total_available = sum(total_resources.values())
+            overall_utilization = (total_used / total_available * 100) if total_available > 0 else 0
+            report.append("")
+            report.append(f"Overall Resource Utilization: {total_used:,} / {total_available:,} ({overall_utilization:.2f}%)")
+        else:
+            report.append("Unable to calculate utilization - missing resource or instance data")
+        
+        report.append("")
         report.append("=" * 80)
         
         print('\n'.join(report))
