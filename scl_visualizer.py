@@ -3,7 +3,8 @@
 SCL Site Map Visualizer
 RDJordan 2025 / CFOGE
 
-This script reads an SCL file and creates a color-coded image of the FPGA site map,
+This script reads an SCL file and creates a color-coded image of the FPGA site map.
+This is super slow for any real FPGA, but it does work.
 """
 
 import argparse
