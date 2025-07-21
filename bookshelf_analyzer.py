@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """
-Bookshelf Format Analyzer for FPGA Research
+Bookshelf Format Design Analyzer:
+RDJordan 2025 / CFOGE
 
-This script analyzes Bookshelf format files used in FPGA placement research.
-It parses .aux, .lib, .nodes, .nets, .pl, .scl, and .wts files to provide
-comprehensive analysis and comparison capabilities.
+This script takes a Bookshelf format design and generates statistics to help understand 
+the dificulty of the place & route chalange
+It parses .aux, .lib, .nodes, .nets, .pl, .scl, and .wts files.
 
 Usage:
     python bookshelf_analyzer.py <directory_path>
@@ -321,7 +322,7 @@ class BookshelfAnalyzer:
         return site_type_counts
     
     def analyze_directory(self):
-        """Analyze all Bookshelf files in the directory."""
+        """Analyze all Bookshelf files in the directory. Find all the files and parse them."""
         print(f"Analyzing Bookshelf files in: {self.directory_path}")
         
         aux_files = list(self.directory_path.glob("*.aux"))
@@ -351,7 +352,7 @@ class BookshelfAnalyzer:
         
         self.site_type_counts = self.count_site_types_from_scl(scl_file) if scl_file.exists() else Counter()
         
-        self.analysis_results = {
+        self.analysis_results = { # these are all the stats and results from the bookshelf file
             'design_name': design_name,
             'aux_data': self.aux_data,
             'cells': self.cells,
@@ -372,7 +373,7 @@ class BookshelfAnalyzer:
         
         return self.analysis_results
     
-    def generate_text_report(self, output_file=None):
+    def generate_text_report(self, output_file=None): # make a report/save for later
         """Generate a comprehensive text report."""
         if not self.analysis_results:
             print("No analysis results available. Run analyze_directory() first.")
@@ -547,7 +548,7 @@ class BookshelfAnalyzer:
             
         return '\n'.join(report)
 
-
+''' Start of main function'''
 def main():
     parser = argparse.ArgumentParser(description='Analyze Bookshelf format files for FPGA research')
     parser.add_argument('directory', help='Directory containing Bookshelf files')
